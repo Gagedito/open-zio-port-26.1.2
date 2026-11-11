@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "zio",
+  "version": "${version}",
+  "name": "Zio",
+  "authors": [
+    "Cypphi"
+  ],
+  "contact": {
+    "discord": "https://discord.com/invite/W2cEqSf8eK"
+  },
+  "icon": "assets/zio/textures/zio.png",
+  "description": "Zio: readable Java reconstruction of the captured Minecraft client; full original equivalence remains unproven.",
+  "environment": "client",
+  "accessWidener": "zio.accesswidener",
+  "entrypoints": {
+    "main": [
+      "dev.zio.client.ZioClient"
+    ],
+    "client": [
+      "dev.zio.client.ZioClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.1.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "baritone-meteor": "1.21.11-SNAPSHOT",
+    "viafabricplus": "4.4.9",
+    "entityculling": "*",
+    "sodium": "*",
+    "lithium": "*",
+    "immediatelyfast": "*",
+    "xaerominimap": "*"
+  },
+  "mixins": [
+    "zio.mixins.json"
+  ]
+}
