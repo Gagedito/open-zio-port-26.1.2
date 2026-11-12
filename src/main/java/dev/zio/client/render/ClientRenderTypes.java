@@ -269,4 +269,23 @@ public final class ClientRenderTypes {
    public static RenderType worldLines() {
       return WORLD_LINES;
    }
+
+   private static RenderType itemAtlasBlit;
+
+   public static RenderType itemAtlasBlit() {
+      if (itemAtlasBlit == null) {
+         itemAtlasBlit = RenderType.create(
+            "zio_item_atlas_blit",
+            RenderSetup.builder(RenderPipelines.GUI_TEXTURED_PREMULTIPLIED_ALPHA)
+               .withTexture(
+                  "Sampler0",
+                  GuiItemAtlasTexture.IDENTIFIER,
+                  () -> RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST)
+               )
+               .createRenderSetup()
+         );
+      }
+
+      return itemAtlasBlit;
+   }
 }

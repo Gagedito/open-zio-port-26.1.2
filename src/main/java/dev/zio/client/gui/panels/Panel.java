@@ -430,6 +430,7 @@ public class Panel implements RegistryContainer, GuiElement, NamedEntry {
                + 0.5F,
             backgroundColor
          );
+         GuiDrawUtils.flush();
          this.children
             .forEach(
                child -> {

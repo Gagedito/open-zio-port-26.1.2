@@ -17,6 +17,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.ScissorState;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import org.joml.Vector4d;
 import org.joml.Vector4i;
 
@@ -26,7 +27,18 @@ public final class ScissorStack implements ClientAccess {
    private ScissorStack() {
    }
 
+   public static ScreenRectangle currentGuiBounds() {
+      ScissorStack.ScissorRegion region = regions.peekLast();
+      if (region == null) {
+         return null;
+      }
+
+      Vector4i guiBounds = region.guiBounds();
+      return new ScreenRectangle(guiBounds.x, guiBounds.y, guiBounds.z, guiBounds.w);
+   }
+
    public static void pop() {
+
       getScissorState().disable();
       regions.removeLast();
       if (!regions.isEmpty()) {

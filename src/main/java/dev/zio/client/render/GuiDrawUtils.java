@@ -10,8 +10,16 @@
 package dev.zio.client.render;
 
 import dev.zio.client.ClientAccess;
+import dev.zio.client.gui.ScissorStack;
+import dev.zio.mixin.DynamicAtlasAllocatorAccessor;
+import dev.zio.mixin.GameRendererAccessor;
+import dev.zio.mixin.GuiItemAtlasAccessor;
+import dev.zio.mixin.GuiRenderStateAccessor;
+import dev.zio.mixin.GuiRendererAccessor;
 
 import com.mojang.blaze3d.platform.Lighting.Entry;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.systems.ScissorState;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -21,6 +29,9 @@ import net.minecraft.CrashReport;
 import net.minecraft.ReportedException;
 import net.minecraft.client.gui.Font.DisplayMode;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.client.gui.render.GuiItemAtlas;
+import net.minecraft.client.gui.render.GuiRenderer;
+import net.minecraft.client.gui.render.DynamicAtlasAllocator;
 import net.minecraft.client.gui.render.TextureSetup;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -44,7 +55,15 @@ import org.joml.Matrix4f;
 public final class GuiDrawUtils implements ClientAccess {
    static final MeshBuffer quadBuffer = MeshBuffer.create();
    static final MeshBuffer lineBuffer = MeshBuffer.create();
+   private static final MeshBuffer itemBlitBuffer = MeshBuffer.create();
    static float lineWidth = 1.0F;
+
+   static {
+      itemBlitBuffer.setFormat(
+         Mode.QUADS,
+         RenderPipelines.GUI_TEXTURED_PREMULTIPLIED_ALPHA.getVertexFormat()
+      );
+   }
 
    public static void flush() {
       flush(true);
@@ -139,15 +158,119 @@ public final class GuiDrawUtils implements ClientAccess {
             null,
             0
          );
+      ScreenRectangle scissorArea = ScissorStack.currentGuiBounds();
+      boolean deferred = GuiDeferredDraws.deferEnabled;
+      GuiRenderer guiRenderer = null;
+      GuiItemAtlas atlas = null;
+      GuiItemAtlas.SlotView view = null;
+      ScissorState scissor = null;
+      boolean scissorEnabled = false;
+      int scissorX = 0;
+      int scissorY = 0;
+      int scissorWidth = 0;
+      int scissorHeight = 0;
+      if (deferred) {
+         scissor = RenderSystem.getScissorStateForRenderTypeDraws();
+         scissorEnabled = scissor.enabled();
+         scissorX = scissor.x();
+         scissorY = scissor.y();
+         scissorWidth = scissor.width();
+         scissorHeight = scissor.height();
+         guiRenderer = ((GameRendererAccessor)ClientAccess.zioMinecraft.gameRenderer)
+            .getGuiRenderer();
+         atlas = guiRenderer == null ? null : ((GuiRendererAccessor)(Object)guiRenderer).getItemAtlas();
+         if (atlas != null) {
+            view = atlas.getOrUpdate(itemState);
+            if (view != null) {
+               ((GuiRenderStateAccessor)guiState)
+                  .getItemModelIdentities()
+                  .add(itemState.getModelIdentity());
+               submitAtlasBlit(
+                  itemState, matrix, x, y,
+                  scissorEnabled, scissorX, scissorY, scissorWidth, scissorHeight, scissor
+               );
+               return;
+            }
+         }
+      }
+
       guiState.addItem(
          new GuiItemRenderState(
             new Matrix3x2f(),
             itemState,
             Math.round(originX),
             Math.round(originY),
-            null
+            scissorArea
          )
       );
+   }
+
+   private static void submitAtlasBlit(
+      TrackingItemStackRenderState itemState, Matrix4f matrix, float x, float y,
+      boolean scissorEnabled, int scissorX, int scissorY, int scissorWidth, int scissorHeight,
+      ScissorState scissor
+   ) {
+      Matrix4f pose = new Matrix4f(matrix);
+      GuiDeferredDraws.submitTask(
+         () -> drawAtlasBlit(
+            itemState, pose, x, y,
+            scissorEnabled, scissorX, scissorY, scissorWidth, scissorHeight, scissor
+         )
+      );
+   }
+
+   private static void drawAtlasBlit(
+      TrackingItemStackRenderState itemState, Matrix4f pose, float x, float y,
+      boolean scissorEnabled, int scissorX, int scissorY, int scissorWidth, int scissorHeight,
+      ScissorState scissor
+   ) {
+      GuiRenderer guiRenderer = ((GameRendererAccessor)ClientAccess.zioMinecraft.gameRenderer)
+         .getGuiRenderer();
+      if (guiRenderer == null) {
+         return;
+      }
+
+      GuiItemAtlas atlas = ((GuiRendererAccessor)(Object)guiRenderer).getItemAtlas();
+      if (atlas == null) {
+         return;
+      }
+
+      GuiItemAtlasAccessor atlasAccessor = (GuiItemAtlasAccessor)(Object)atlas;
+      DynamicAtlasAllocator allocator = atlasAccessor.getAllocator();
+      if (allocator == null) {
+         return;
+      }
+
+      DynamicAtlasAllocator.Slot slot = (DynamicAtlasAllocator.Slot) ((DynamicAtlasAllocatorAccessor)(Object)allocator)
+         .getUsedSlots()
+         .get(itemState.getModelIdentity());
+      if (slot == null) {
+         return;
+      }
+
+      float slotFraction = atlasAccessor.getSlotTextureSize() / (float)atlasAccessor.getTextureSize();
+      float u0 = slot.x() * slotFraction;
+      float v0 = 1.0F - slot.y() * slotFraction;
+      float u1 = u0 + slotFraction;
+      float v1 = v0 - slotFraction;
+      GuiItemAtlasTexture.INSTANCE.updateFrom(atlasAccessor.getTextureView());
+      ClientAccess.zioMinecraft.getTextureManager()
+         .register(GuiItemAtlasTexture.IDENTIFIER, GuiItemAtlasTexture.INSTANCE);
+      itemBlitBuffer.addVertex(pose, x, y + 16.0F, 0.0F).setUv(u0, v1).setColor(-1);
+      itemBlitBuffer.addVertex(pose, x + 16.0F, y + 16.0F, 0.0F).setUv(u1, v1).setColor(-1);
+      itemBlitBuffer.addVertex(pose, x + 16.0F, y, 0.0F).setUv(u1, v0).setColor(-1);
+      itemBlitBuffer.addVertex(pose, x, y, 0.0F).setUv(u0, v0).setColor(-1);
+      if (scissorEnabled) {
+         scissor.enable(scissorX, scissorY, scissorWidth, scissorHeight);
+      } else {
+         scissor.disable();
+      }
+
+      try {
+         itemBlitBuffer.draw(ClientRenderTypes.itemAtlasBlit());
+      } finally {
+         scissor.disable();
+      }
    }
 
    private void legacyDrawItem(

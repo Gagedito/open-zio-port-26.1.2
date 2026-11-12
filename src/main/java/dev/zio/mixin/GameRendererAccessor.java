@@ -39,6 +39,9 @@ public interface GameRendererAccessor {
    @Accessor("fogRenderer")
    net.minecraft.client.renderer.fog.FogRenderer getFogRenderer();
 
+   @Accessor("guiRenderer")
+   net.minecraft.client.gui.render.GuiRenderer getGuiRenderer();
+
    @Invoker("bobView")
    void zio$bobView(CameraRenderState cameraState, PoseStack poses);
 

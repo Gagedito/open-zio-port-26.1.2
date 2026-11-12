@@ -122,6 +122,18 @@ class RegistryEntryComponent<E> extends ButtonComponent {
          float iconOffset = 0.0F;
          if (this.iconItem != null
             && this.iconItem != Items.AIR) {
+            ScissorStack.pushIntersection(
+               (int)this.panel
+                  .getX(),
+               (int)(
+                  this.panel
+                     .getY()
+                  + this.yOffset
+               ),
+               (int)this.panel
+                  .getWidth(),
+               this.getHeight()
+            );
             GuiDrawUtils.drawItem(
                poseStack,
                this.iconStack,
@@ -137,6 +149,7 @@ class RegistryEntryComponent<E> extends ButtonComponent {
                ),
                0.0F
             );
+            ScissorStack.pop();
             iconOffset = 2e+01F;
          }
 
